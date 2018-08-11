@@ -7,11 +7,28 @@ from os.path import basename
 
 ST3 = int(sublime.version()) >= 3000
 
+# syntax definitions
+apex = 'Packages/MavensMate/sublime/lang/Apex.sublime-syntax'
+java = 'Packages/Java/Java.sublime-syntax'
+
 if ST3:
     from .common import first, set_proper_scheme, calc_width, get_group
 else:
     from common import first, set_proper_scheme, calc_width, get_group
 
+def get_symbols(view):
+    ''' custom implementation to override `view.get_symbols()`
+        If the current view is an Apex file, then temporarily convert the syntax to Java to obtain Java's symbols.
+        Then switch the syntax back to Apex.
+    '''
+    symlist = []
+    if view.settings().get('syntax') == apex:
+        view.set_syntax_file(java) # workaround for Apex to use Java's tmpreferences
+        symlist = view.get_symbols()
+        view.set_syntax_file(apex) # set syntax back to Apex
+    else:
+        symlist = view.get_symbols()
+    return symlist
 
 def set_active_group(window, view, other_group):
     nag = window.active_group()
@@ -67,17 +84,19 @@ def show(window, view_id=None, ignore_existing=False, single_pane=False, other_g
     symlist = []
     file_path = None
     prev_focus = None
-    if other_group:
+    if other_group: # "right" or "left"
         prev_focus = window.active_view()
-        symlist = prev_focus.get_symbols()
+        symlist = get_symbols(prev_focus)
         file_path = prev_focus.file_name()
         # simulate 'toggle sidebar':
         if prev_focus and 'outline' in prev_focus.scope_name(0):
             window.run_command('close_file')
             return
 
+    # create the Outline column (view)
     view, reset_sels = set_view(view_id, window, ignore_existing, single_pane)
 
+    # move Outline to left or right
     nag, group = set_active_group(window, view, other_group)
 
     if other_group and prev_focus:
@@ -117,7 +136,7 @@ def show(window, view_id=None, ignore_existing=False, single_pane=False, other_g
             window.set_view_index(v, 1, 0)
 
     window.focus_view(prev_focus)
-    
+
     refresh_sym_view(view, symlist, file_path)
 
 def refresh_sym_view(sym_view, symlist, path):
